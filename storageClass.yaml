@@ -1,0 +1,9 @@
+storageClass:
+  enabled: true
+  name: azurefile-csi-nfs
+  provisioner: file.csi.azure.com
+  allowVolumeExpansion: true
+  reclaimPolicy: Retain
+  volumeBindingMode: Immediate
+  parameters:
+    protocol: nfs

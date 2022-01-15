@@ -1,0 +1,38 @@
+configMaps:
+  - name: init-shell-script
+    data:
+      init.sh: |-
+        #!/bin/bash
+
+        CONF_FILE="/etc/sftp/users.conf"
+        KEYVAULT=""
+        AZ_SPN_ID=""
+        AZ_SPN_PASSWORD=""
+        AZ_SPN_TENANT_ID=""
+        AZ_SUBSCRIPTION_ID=""
+
+        az login --service-principal --username "${AZ_SPN_ID}" --password "${AZ_SPN_PASSWORD}" --tenant "${AZ_SPN_TENANT_ID}"
+        az account set --subscription "${AZ_SUBSCRIPTION_ID}"
+
+        SECRETS+=($(az keyvault secret list --vault-name $KEYVAULT --query "[].id" -o tsv))
+
+        chmod 755 /home
+
+        if [[ -e $CONF_FILE ]]; then
+            rm -rf "${CONF_FILE}"
+            touch $CONF_FILE
+        else
+            touch $CONF_FILE
+        fi
+
+        for SECRET in "${SECRETS[@]}"; do
+            SECRETNAME=$(basename $SECRET |  tr -d '\r')
+            SECRETVALUE=$(az keyvault secret show --vault-name $KEYVAULT --name $SECRETNAME --query 'value' | tr -d '"' | tr -d '\r')
+
+            echo "$SECRETNAME:$SECRETVALUE:::upload" >> $CONF_FILE
+        done
+
+        if [[ ! -s $CONF_FILE ]]; then
+            echo "** ERROR: user.conf is empty" 1>&2
+            exit 1
+        fi

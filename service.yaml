@@ -1,0 +1,6 @@
+service:
+  enableInternalLB: true
+  port: 2222
+  targetPort: 22
+  name: ssh
+  protocol: TCP
