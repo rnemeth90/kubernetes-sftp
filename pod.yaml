@@ -1,0 +1,104 @@
+type: generic
+# We will increment the revision number to trigger a rollout
+# Perhaps use the build or release ID
+# The rollout will then add any new user dirs
+podAnnotations:
+  revision: "17"
+
+replicaCount: 2
+
+service:
+  enableInternalLB: true
+  port: 2222
+  targetPort: 22
+  name: ssh
+  protocol: TCP
+
+ingress:
+  enabled: false
+  tls: true
+  annotations:
+    # kubernetes.io/ingress.class: nginx-ingress-$(AKS.Namespace)
+    cert-manager.io/cluster-issuer: ca-issuer
+  # The URL path prefix to send requests to this service
+  # path: /foo/bar
+  # The host to create TLS certificate for
+  # host: "*.aprimo.com"
+
+image:
+  repository: docker.io/atmoz/sftp
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: alpine
+
+securityContext: null
+podSecurityContext: null
+
+storageClass:
+  enabled: true
+  name: azurefile-csi-nfs
+  provisioner: file.csi.azure.com
+  allowVolumeExpansion: true
+  reclaimPolicy: Retain
+  volumeBindingMode: Immediate
+  parameters:
+    protocol: nfs
+
+volumes:
+  persistentVolumeClaim:
+    enabled: true
+    name: pvc-ftp-clientdirs
+    accessModes:
+      - ReadWriteMany
+    storageClassName: azurefile-csi-nfs
+    storage: 150Gi
+    # the mount path inside the container(s)
+    mountPath: /home/
+
+  configMapVolumes:
+    - name: init-shell-script
+      mountPath: /scripts
+      defaultMode: 0755
+
+  emptyDir:
+    enabled: true
+    name: sftp
+    mountPath: /etc/sftp
+
+configMaps:
+  - name: init-shell-script
+    data:
+      init.sh: |-
+        #!/bin/bash
+
+        CONF_FILE="/etc/sftp/users.conf"
+        KEYVAULT="dev-03us1-ftp-client-kv1"
+        AZ_SPN_ID="ed821949-05d9-483a-a2aa-a7428fc7109d"
+        AZ_SPN_PASSWORD="4il7Q~N_ZqZVt9Ph8yHso8R0bOl1t5bujdopN"
+        AZ_SPN_TENANT_ID="d05954c1-36eb-40b2-8f23-7f2ce352faf6"
+        AZ_SUBSCRIPTION_ID="f3e2e7c5-21a3-4691-b121-da22a42359ad"
+
+        az login --service-principal --username "${AZ_SPN_ID}" --password "${AZ_SPN_PASSWORD}" --tenant "${AZ_SPN_TENANT_ID}"
+        az account set --subscription "${AZ_SUBSCRIPTION_ID}"
+
+        SECRETS+=($(az keyvault secret list --vault-name $KEYVAULT --query "[].id" -o tsv))
+
+        chmod 755 /home
+
+        if [[ -e $CONF_FILE ]]; then
+            rm -rf "${CONF_FILE}"
+            touch $CONF_FILE
+        else
+            touch $CONF_FILE
+        fi
+
+        for SECRET in "${SECRETS[@]}"; do
+            SECRETNAME=$(basename $SECRET |  tr -d '\r')
+            SECRETVALUE=$(az keyvault secret show --vault-name $KEYVAULT --name $SECRETNAME --query 'value' | tr -d '"' | tr -d '\r')
+
+            echo "$SECRETNAME:$SECRETVALUE:::upload" >> $CONF_FILE
+        done
+
+        if [[ ! -s $CONF_FILE ]]; then
+            echo "** ERROR: user.conf is empty" 1>&2
+            exit 1
+        fi
