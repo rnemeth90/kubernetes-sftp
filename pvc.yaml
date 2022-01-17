@@ -1,10 +1,11 @@
-volumes:
-  persistentVolumeClaim:
-    enabled: true
-    name: pvc-ftp-clientdirs
-    accessModes:
-      - ReadWriteMany
-    storageClassName: azurefile-csi-nfs
-    storage: 150Gi
-    # the mount path inside the container(s)
-    mountPath: /home/
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-ftp-clientdirs
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: azurefile-csi-nfs

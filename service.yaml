@@ -1,6 +1,12 @@
-service:
-  enableInternalLB: true
-  port: 2222
-  targetPort: 22
-  name: ssh
-  protocol: TCP
+apiVersion: v1
+kind: Service
+metadata:
+  name: sftp-service
+spec:
+  selector:
+    app: sftp
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 22
+      targetPort: 22
